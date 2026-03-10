@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nebulon</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-container {
+            position: relative;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <script src="src/config/constants.js"></script>
+    <script src="src/config/gameData.js"></script>
+    <script src="src/utils/helpers.js"></script>
+    <script src="src/entities/Ship.js"></script>
+    <script src="src/entities/Enemy.js"></script>
+    <script src="src/entities/Asteroid.js"></script>
+    <script src="src/entities/Projectile.js"></script>
+    <script src="src/entities/LootDrop.js"></script>
+    <script src="src/entities/Planet.js"></script>
+    <script src="src/systems/QuestSystem.js"></script>
+    <script src="src/systems/InventorySystem.js"></script>
+    <script src="src/systems/UpgradeSystem.js"></script>
+    <script src="src/systems/CombatSystem.js"></script>
+    <script src="src/systems/SaveSystem.js"></script>
+    <script src="src/systems/CraftingSystem.js"></script>
+    <script src="src/scenes/BootScene.js"></script>
+    <script src="src/scenes/MenuScene.js"></script>
+    <script src="src/scenes/SpaceScene.js"></script>
+    <script src="src/scenes/CombatScene.js"></script>
+    <script src="src/scenes/PlanetScene.js"></script>
+    <script src="src/scenes/MapScene.js"></script>
+    <script src="src/scenes/InventoryScene.js"></script>
+    <script src="src/scenes/UpgradeScene.js"></script>
+    <script src="src/scenes/QuestScene.js"></script>
+    <script src="src/scenes/GameOverScene.js"></script>
+    <script src="src/scenes/VictoryScene.js"></script>
+    <script src="src/scenes/LandingScene.js"></script>
+    <script src="src/scenes/CraftingScene.js"></script>
+    <script src="src/game.js"></script>
+</body>
+</html>

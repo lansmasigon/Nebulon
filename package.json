@@ -1,0 +1,19 @@
+{
+  "name": "stellar-odyssey",
+  "version": "1.0.0",
+  "description": "A 2D space adventure game built with Phaser.js",
+  "main": "main.js",
+  "scripts": {
+    "start": "npx serve . -l 8080",
+    "electron": "electron main.js"
+  },
+  "keywords": ["game", "space", "phaser", "adventure"],
+  "license": "MIT",
+  "dependencies": {
+    "phaser": "^3.60.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "serve": "^14.2.0"
+  }
+}
