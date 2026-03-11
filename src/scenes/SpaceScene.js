@@ -44,8 +44,15 @@ class SpaceScene extends Phaser.Scene {
         this.ship.x = 0;
         this.ship.y = 0;
 
+        this.onlineAssetsReady = this.registry.get('onlineAssetsReady') === true;
+
         // Background layers
         this.add.graphics().fillStyle(COLORS.BG_DARK, 1).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        if (this.onlineAssetsReady && this.textures.exists('bg_space')) {
+            this.spaceBgImage = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg_space')
+                .setOrigin(0)
+                .setAlpha(0.25);
+        }
 
         // Generate parallax star layers
         this.starLayers = [];
@@ -95,6 +102,18 @@ class SpaceScene extends Phaser.Scene {
         this.shipGraphics = this.add.graphics();
         this.fxGraphics = this.add.graphics();
         this.uiGraphics = this.add.graphics();
+        this.shipSprite = null;
+        this.enemySprites = {};
+        this.asteroidSprites = {};
+        this.lootSprites = {};
+        this.shopSprites = {};
+        this.planetSprites = {};
+        this.spriteIdCounter = 0;
+        if (this.onlineAssetsReady && (this.textures.exists('ship_player') || this.textures.exists('ship_player_alt'))) {
+            this.shipSprite = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, this.getPlayerShipTextureKey())
+                .setDepth(50)
+                .setScale(0.45);
+        }
 
         // Planets in world space
         this.planets = GameData.planets[this.currentStage].map(function(p) { return new Planet(p); });
@@ -717,20 +736,42 @@ class SpaceScene extends Phaser.Scene {
         this.drawSpaceShops();
         this.drawPlanetsInWorld();
 
-        for (var ai = 0; ai < this.asteroids.length; ai++) this.asteroids[ai].draw(this.entityGraphics, this.camX, this.camY);
-        for (var ei = 0; ei < this.enemies.length; ei++) this.enemies[ei].draw(this.entityGraphics, this.camX, this.camY);
-        for (var li = 0; li < this.lootDrops.length; li++) this.lootDrops[li].draw(this.entityGraphics, this.camX, this.camY);
+        for (var ai = 0; ai < this.asteroids.length; ai++) {
+            if (!this.tryRenderAsteroidSprite(this.asteroids[ai])) {
+                this.asteroids[ai].draw(this.entityGraphics, this.camX, this.camY);
+            }
+        }
+        for (var ei = 0; ei < this.enemies.length; ei++) {
+            if (!this.tryRenderEnemySprite(this.enemies[ei])) {
+                this.enemies[ei].draw(this.entityGraphics, this.camX, this.camY);
+            }
+        }
+        for (var li = 0; li < this.lootDrops.length; li++) {
+            if (!this.tryRenderLootSprite(this.lootDrops[li])) {
+                this.lootDrops[li].draw(this.entityGraphics, this.camX, this.camY);
+            }
+        }
+
+        this.cleanupEntitySprites();
 
         // Draw combat effects with camera offset
         this.drawCombatEffectsWithCamera();
 
         // Draw ship at screen center
-        var savedX = this.ship.x, savedY = this.ship.y;
-        this.ship.x = GAME_WIDTH / 2;
-        this.ship.y = GAME_HEIGHT / 2;
-        this.ship.draw(this.shipGraphics);
-        this.ship.x = savedX;
-        this.ship.y = savedY;
+        if (this.shipSprite) {
+            var shipTexture = this.getPlayerShipTextureKey();
+            if (shipTexture && this.shipSprite.texture.key !== shipTexture) this.shipSprite.setTexture(shipTexture);
+            this.shipSprite.setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+            this.shipSprite.setRotation(this.ship.rotation + Math.PI / 2);
+            this.shipSprite.setTint(this.ship.color);
+        } else {
+            var savedX = this.ship.x, savedY = this.ship.y;
+            this.ship.x = GAME_WIDTH / 2;
+            this.ship.y = GAME_HEIGHT / 2;
+            this.ship.draw(this.shipGraphics);
+            this.ship.x = savedX;
+            this.ship.y = savedY;
+        }
 
         this.drawUIBars();
         this.drawMinimap();
@@ -745,6 +786,11 @@ class SpaceScene extends Phaser.Scene {
     }
 
     drawParallaxStars() {
+        if (this.spaceBgImage) {
+            this.spaceBgImage.tilePositionX = this.camX * 0.08;
+            this.spaceBgImage.tilePositionY = this.camY * 0.08;
+        }
+
         var g = this.bgGraphics;
         for (var l = 0; l < this.starLayers.length; l++) {
             var layer = this.starLayers[l];
@@ -780,7 +826,11 @@ class SpaceScene extends Phaser.Scene {
             var shop = this.spaceShops[i];
             var sx = shop.x - this.camX;
             var sy = shop.y - this.camY;
-            if (sx < -60 || sx > GAME_WIDTH + 60 || sy < -60 || sy > GAME_HEIGHT + 60) continue;
+            if (sx < -60 || sx > GAME_WIDTH + 60 || sy < -60 || sy > GAME_HEIGHT + 60) {
+                this.tryRenderShopSprite(shop, sx, sy, true);
+                continue;
+            }
+            this.tryRenderShopSprite(shop, sx, sy, false);
 
             var pulse = 1 + Math.sin(shop.pulsePhase) * 0.1;
 
@@ -827,6 +877,7 @@ class SpaceScene extends Phaser.Scene {
 
             // Draw if on screen
             if (sx > -80 && sx < GAME_WIDTH + 80 && sy > -80 && sy < GAME_HEIGHT + 80) {
+                this.tryRenderPlanetSprite(planet, sx, sy, false);
                 var r = planet.radius * 2;
                 if (planet.hasRings) {
                     g.lineStyle(3, 0xddcc88, 0.4);
@@ -846,6 +897,7 @@ class SpaceScene extends Phaser.Scene {
                     g.strokeCircle(sx, sy, r + 10);
                 }
             } else {
+                this.tryRenderPlanetSprite(planet, sx, sy, true);
                 // Draw edge indicator arrow pointing to planet
                 this.drawEdgeIndicator(g, sx, sy, planet.color, planet.name);
             }
@@ -1126,6 +1178,15 @@ class SpaceScene extends Phaser.Scene {
     }
 
     playSound(type) {
+        if (this.onlineAssetsReady && this.sound) {
+            var map = { laser: 'sfx_laser', explosion: 'sfx_explosion', hit: 'sfx_hit' };
+            var key = map[type];
+            if (key && this.cache.audio.exists(key)) {
+                this.sound.play(key, { volume: 0.35 });
+                return;
+            }
+        }
+
         if (!this.game.audioCtx) return;
         var ctx = this.game.audioCtx;
         if (ctx.state === 'suspended') ctx.resume();
@@ -1173,5 +1234,174 @@ class SpaceScene extends Phaser.Scene {
                     osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.2); break;
             }
         } catch (e) { }
+    }
+
+    ensureEntityId(entity, prefix) {
+        if (!entity.__spriteId) {
+            this.spriteIdCounter += 1;
+            entity.__spriteId = prefix + '_' + this.spriteIdCounter;
+        }
+        return entity.__spriteId;
+    }
+
+    getEnemyTextureKey(enemy) {
+        if (!enemy || !enemy.type) return null;
+        if (enemy.isBoss && this.textures.exists('enemy_boss')) return 'enemy_boss';
+        if (enemy.type === 'pirate' && this.textures.exists('enemy_pirate')) return 'enemy_pirate';
+        if (enemy.type === 'alien' && this.textures.exists('enemy_alien')) return 'enemy_alien';
+        if (enemy.type === 'drone' && this.textures.exists('enemy_drone')) return 'enemy_drone';
+        if (enemy.type === 'asteroid_creature' && this.textures.exists('enemy_alien')) return 'enemy_alien';
+        return this.textures.exists('enemy_pirate') ? 'enemy_pirate' : null;
+    }
+
+    getPlayerShipTextureKey() {
+        if (!this.onlineAssetsReady) return null;
+        if (this.ship.shipType === 'warship' || this.ship.shipType === 'warp_ship') {
+            if (this.textures.exists('ship_player_alt')) return 'ship_player_alt';
+        }
+        return this.textures.exists('ship_player') ? 'ship_player' : (this.textures.exists('ship_player_alt') ? 'ship_player_alt' : null);
+    }
+
+    tryRenderEnemySprite(enemy) {
+        if (!this.onlineAssetsReady || !enemy || !enemy.alive) return false;
+        var textureKey = this.getEnemyTextureKey(enemy);
+        if (!textureKey) return false;
+
+        var sx = enemy.x - this.camX;
+        var sy = enemy.y - this.camY;
+        var id = this.ensureEntityId(enemy, 'enemy');
+        var sprite = this.enemySprites[id];
+        if (!sprite) {
+            sprite = this.add.image(sx, sy, textureKey).setDepth(25);
+            this.enemySprites[id] = sprite;
+        }
+
+        if (sprite.texture.key !== textureKey) sprite.setTexture(textureKey);
+        if (sx < -120 || sx > GAME_WIDTH + 120 || sy < -120 || sy > GAME_HEIGHT + 120) {
+            sprite.setVisible(false);
+            return true;
+        }
+
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setScale(Helpers.clamp(enemy.size / 32, 0.45, 1.8));
+        sprite.setRotation(enemy.rotation + Math.PI / 2);
+        sprite.setTint(enemy.flashTimer > 0 ? 0xffffff : enemy.color);
+        sprite.setAlpha(enemy.isBoss ? 0.95 : 0.9);
+        return true;
+    }
+
+    tryRenderAsteroidSprite(asteroid) {
+        if (!this.onlineAssetsReady || !asteroid || !asteroid.alive || !this.textures.exists('asteroid_sprite')) return false;
+        var sx = asteroid.x - this.camX;
+        var sy = asteroid.y - this.camY;
+        var id = this.ensureEntityId(asteroid, 'ast');
+        var sprite = this.asteroidSprites[id];
+        if (!sprite) {
+            sprite = this.add.image(sx, sy, 'asteroid_sprite').setDepth(12);
+            this.asteroidSprites[id] = sprite;
+        }
+        if (sx < -120 || sx > GAME_WIDTH + 120 || sy < -120 || sy > GAME_HEIGHT + 120) {
+            sprite.setVisible(false);
+            return true;
+        }
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setScale(Helpers.clamp(asteroid.size / 46, 0.2, 1.4));
+        sprite.setRotation(asteroid.rotation);
+        sprite.setTint(asteroid.flashTimer > 0 ? 0xffffff : asteroid.color);
+        return true;
+    }
+
+    tryRenderLootSprite(loot) {
+        if (!this.onlineAssetsReady || !loot || !loot.alive) return false;
+        var textureKey = 'loot_sprite';
+        if ((loot.data && (loot.data.rarity === 'common' || loot.data.rarity === 'uncommon')) && this.textures.exists('object_sprite')) {
+            textureKey = 'object_sprite';
+        } else if (!this.textures.exists('loot_sprite')) {
+            return false;
+        }
+        var id = this.ensureEntityId(loot, 'loot');
+        var sprite = this.lootSprites[id];
+        if (!sprite) {
+            sprite = this.add.image(loot.x - this.camX, loot.y - this.camY, textureKey).setDepth(28);
+            this.lootSprites[id] = sprite;
+        }
+        if (sprite.texture.key !== textureKey) sprite.setTexture(textureKey);
+        var sx = loot.x - this.camX;
+        var sy = loot.y - this.camY + Math.sin(loot.bobOffset || 0) * 3;
+        if (sx < -60 || sx > GAME_WIDTH + 60 || sy < -60 || sy > GAME_HEIGHT + 60) {
+            sprite.setVisible(false);
+            return true;
+        }
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setScale(0.18 + Math.sin(loot.pulsePhase || 0) * 0.02);
+        sprite.setTint(loot.color || 0xffffff);
+        sprite.setAlpha(loot.lifetime < 3000 ? loot.lifetime / 3000 : 0.95);
+        return true;
+    }
+
+    tryRenderShopSprite(shop, sx, sy, forceHide) {
+        if (!this.onlineAssetsReady || !shop || !this.textures.exists('shop_sprite')) return false;
+        var id = this.ensureEntityId(shop, 'shop');
+        var sprite = this.shopSprites[id];
+        if (!sprite) {
+            sprite = this.add.image(sx, sy, 'shop_sprite').setDepth(16);
+            this.shopSprites[id] = sprite;
+        }
+        if (forceHide) {
+            sprite.setVisible(false);
+            return true;
+        }
+        var pulse = 0.33 + Math.sin(shop.pulsePhase || 0) * 0.02;
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setScale(pulse);
+        sprite.setRotation((shop.pulsePhase || 0) * 0.1);
+        sprite.setTint(shop.color || 0xffffff);
+        sprite.setAlpha(0.85);
+        return true;
+    }
+
+    tryRenderPlanetSprite(planet, sx, sy, forceHide) {
+        if (!this.onlineAssetsReady || !planet || !this.textures.exists('planet_sprite')) return false;
+        var id = this.ensureEntityId(planet, 'planet');
+        var sprite = this.planetSprites[id];
+        if (!sprite) {
+            sprite = this.add.image(sx, sy, 'planet_sprite').setDepth(8);
+            this.planetSprites[id] = sprite;
+        }
+        if (forceHide) {
+            sprite.setVisible(false);
+            return true;
+        }
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setScale(Helpers.clamp(planet.radius / 20, 0.25, 2.2));
+        sprite.setTint(planet.color || 0xffffff);
+        sprite.setAlpha(planet.unlocked ? 0.8 : 0.3);
+        return true;
+    }
+
+    cleanupEntitySprites() {
+        this.cleanupSpriteMap(this.enemySprites, this.enemies);
+        this.cleanupSpriteMap(this.asteroidSprites, this.asteroids);
+        this.cleanupSpriteMap(this.lootSprites, this.lootDrops);
+    }
+
+    cleanupSpriteMap(map, entities) {
+        var aliveIds = {};
+        for (var i = 0; i < entities.length; i++) {
+            var entity = entities[i];
+            if (entity && entity.alive && entity.__spriteId) aliveIds[entity.__spriteId] = true;
+        }
+
+        for (var key in map) {
+            if (!aliveIds[key]) {
+                if (map[key] && map[key].destroy) map[key].destroy();
+                delete map[key];
+            }
+        }
     }
 }

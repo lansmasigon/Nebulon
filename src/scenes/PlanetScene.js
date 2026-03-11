@@ -46,8 +46,11 @@ class PlanetScene extends Phaser.Scene {
         this.projectileGraphics = this.add.graphics();
         this.fxGraphics = this.add.graphics();
         this.uiGraphics = this.add.graphics();
+        this.terrainSpriteLayer = this.add.container(0, 0).setDepth(1);
+        this.useTerrainSpriteLayers = this.textures.exists('terrain_rock') || this.textures.exists('terrain_crystal') || this.textures.exists('terrain_pillar') || this.textures.exists('terrain_ruins') || this.textures.exists('terrain_plant');
 
         this.drawStaticTerrain();
+        this.createTerrainSpriteLayers();
 
         this.player = {
             x: this.worldWidth / 2, y: this.worldHeight / 2,
@@ -66,6 +69,16 @@ class PlanetScene extends Phaser.Scene {
             shieldHP: 30, maxShieldHP: 30,
             killCount: 0, collectCount: {}
         };
+        this.onlineAssetsReady = this.registry.get('onlineAssetsReady') === true;
+        this.spriteIdCounter = 0;
+        this.collectibleSprites = {};
+        this.interactableSprites = {};
+        this.surfaceEnemySprites = {};
+        this.projectileSprites = {};
+        this.playerSprite = null;
+        if (this.textures.exists('character_player')) {
+            this.playerSprite = this.add.image(0, 0, 'character_player').setDepth(60).setScale(0.85);
+        }
 
         this.camX = 0;
         this.camY = 0;
@@ -303,65 +316,190 @@ class PlanetScene extends Phaser.Scene {
             }
         }
 
-        // Draw decorations (static)
+        if (!this.useTerrainSpriteLayers) {
+            // Draw decorations (static fallback)
+            for (var di = 0; di < this.decorations.length; di++) {
+                var deco = this.decorations[di];
+                g.fillStyle(deco.color, 0.4);
+                if (deco.type === 'grass' || deco.type === 'plant' || deco.type === 'spore') {
+                    for (var blade = 0; blade < 3; blade++) {
+                        var ba = deco.rotation + blade * 0.8;
+                        g.lineStyle(1, deco.color, 0.5);
+                        g.lineBetween(deco.x, deco.y, deco.x + Math.cos(ba) * deco.size, deco.y + Math.sin(ba) * deco.size);
+                    }
+                } else if (deco.type === 'pebble') {
+                    g.fillCircle(deco.x, deco.y, deco.size * 0.5);
+                } else if (deco.type === 'crack') {
+                    g.lineStyle(1, 0x000000, 0.15);
+                    g.lineBetween(deco.x, deco.y, deco.x + deco.size * 2, deco.y + deco.size);
+                } else if (deco.type === 'moss') {
+                    g.fillStyle(0x225522, 0.2);
+                    g.fillCircle(deco.x, deco.y, deco.size);
+                } else if (deco.type === 'vent') {
+                    g.fillStyle(0x333333, 0.3);
+                    g.fillCircle(deco.x, deco.y, deco.size * 0.8);
+                    g.fillStyle(0x111111, 0.2);
+                    g.fillCircle(deco.x, deco.y, deco.size * 0.4);
+                }
+            }
+
+            // Draw obstacles (fallback)
+            for (var oi = 0; oi < this.obstacles.length; oi++) {
+                var obs = this.obstacles[oi];
+                g.fillStyle(obs.color, 0.9);
+                if (obs.type === 'rock') {
+                    g.fillCircle(obs.x, obs.y, obs.size);
+                    g.fillStyle(0x000000, 0.15);
+                    g.fillCircle(obs.x + obs.size * 0.2, obs.y + obs.size * 0.2, obs.size * 0.7);
+                } else if (obs.type === 'crystal') {
+                    var s = obs.size;
+                    g.fillStyle(0x88ccff, 0.5);
+                    g.fillTriangle(obs.x, obs.y - s, obs.x - s * 0.5, obs.y + s * 0.5, obs.x + s * 0.5, obs.y + s * 0.5);
+                    g.fillStyle(0xaaddff, 0.3);
+                    g.fillTriangle(obs.x, obs.y - s * 0.6, obs.x - s * 0.3, obs.y + s * 0.3, obs.x + s * 0.3, obs.y + s * 0.3);
+                } else if (obs.type === 'pillar') {
+                    g.fillRect(obs.x - obs.size * 0.3, obs.y - obs.size, obs.size * 0.6, obs.size * 2);
+                    g.fillStyle(0x000000, 0.1);
+                    g.fillRect(obs.x - obs.size * 0.15, obs.y - obs.size * 0.8, obs.size * 0.3, obs.size * 1.6);
+                } else if (obs.type === 'ruins') {
+                    g.fillStyle(0x667788, 0.6);
+                    g.fillRect(obs.x - obs.size * 0.5, obs.y - obs.size * 0.3, obs.size, obs.size * 0.6);
+                    g.fillStyle(0x556677, 0.4);
+                    g.fillRect(obs.x - obs.size * 0.3, obs.y - obs.size * 0.6, obs.size * 0.6, obs.size * 0.3);
+                    g.fillStyle(0x000000, 0.1);
+                    g.fillCircle(obs.x + obs.size * 0.1, obs.y, obs.size * 0.15);
+                } else if (obs.type === 'plant') {
+                    g.fillStyle(0x228833, 0.6);
+                    g.fillCircle(obs.x, obs.y, obs.size * 0.7);
+                    g.fillStyle(0x33aa44, 0.4);
+                    g.fillCircle(obs.x - obs.size * 0.2, obs.y - obs.size * 0.3, obs.size * 0.4);
+                    g.fillCircle(obs.x + obs.size * 0.3, obs.y - obs.size * 0.1, obs.size * 0.35);
+                }
+            }
+        }
+    }
+
+    createTerrainSpriteLayers() {
+        if (!this.useTerrainSpriteLayers || !this.terrainSpriteLayer) return;
+
+        // Decorative sprite layer
         for (var di = 0; di < this.decorations.length; di++) {
             var deco = this.decorations[di];
-            g.fillStyle(deco.color, 0.4);
-            if (deco.type === 'grass' || deco.type === 'plant' || deco.type === 'spore') {
-                for (var blade = 0; blade < 3; blade++) {
-                    var ba = deco.rotation + blade * 0.8;
-                    g.lineStyle(1, deco.color, 0.5);
-                    g.lineBetween(deco.x, deco.y, deco.x + Math.cos(ba) * deco.size, deco.y + Math.sin(ba) * deco.size);
-                }
-            } else if (deco.type === 'pebble') {
-                g.fillCircle(deco.x, deco.y, deco.size * 0.5);
-            } else if (deco.type === 'crack') {
-                g.lineStyle(1, 0x000000, 0.15);
-                g.lineBetween(deco.x, deco.y, deco.x + deco.size * 2, deco.y + deco.size);
-            } else if (deco.type === 'moss') {
-                g.fillStyle(0x225522, 0.2);
-                g.fillCircle(deco.x, deco.y, deco.size);
-            } else if (deco.type === 'vent') {
-                g.fillStyle(0x333333, 0.3);
-                g.fillCircle(deco.x, deco.y, deco.size * 0.8);
-                g.fillStyle(0x111111, 0.2);
-                g.fillCircle(deco.x, deco.y, deco.size * 0.4);
-            }
+            var localBiome = this.getBiomeAtWorldPosition(deco.x, deco.y);
+            var decoKey = this.getDecoTextureKey(deco, localBiome);
+            if (!decoKey || !this.textures.exists(decoKey)) continue;
+            var decoStyle = this.getBiomeStyle(localBiome);
+
+            var decoSprite = this.add.image(deco.x, deco.y, decoKey);
+            decoSprite.setDepth(2);
+            decoSprite.setTint(this.mixTint(deco.color || 0xffffff, decoStyle.tint));
+            decoSprite.setAlpha(0.12 + decoStyle.decoAlphaBoost);
+            decoSprite.setRotation(deco.rotation || 0);
+            decoSprite.setScale(Helpers.clamp(((deco.size || 4) / 8) * decoStyle.decoScale, 0.28, 1.35));
+            this.terrainSpriteLayer.add(decoSprite);
         }
 
-        // Draw obstacles
+        // Obstacle sprite layer
         for (var oi = 0; oi < this.obstacles.length; oi++) {
             var obs = this.obstacles[oi];
-            g.fillStyle(obs.color, 0.9);
-            if (obs.type === 'rock') {
-                g.fillCircle(obs.x, obs.y, obs.size);
-                g.fillStyle(0x000000, 0.15);
-                g.fillCircle(obs.x + obs.size * 0.2, obs.y + obs.size * 0.2, obs.size * 0.7);
-            } else if (obs.type === 'crystal') {
-                var s = obs.size;
-                g.fillStyle(0x88ccff, 0.5);
-                g.fillTriangle(obs.x, obs.y - s, obs.x - s * 0.5, obs.y + s * 0.5, obs.x + s * 0.5, obs.y + s * 0.5);
-                g.fillStyle(0xaaddff, 0.3);
-                g.fillTriangle(obs.x, obs.y - s * 0.6, obs.x - s * 0.3, obs.y + s * 0.3, obs.x + s * 0.3, obs.y + s * 0.3);
-            } else if (obs.type === 'pillar') {
-                g.fillRect(obs.x - obs.size * 0.3, obs.y - obs.size, obs.size * 0.6, obs.size * 2);
-                g.fillStyle(0x000000, 0.1);
-                g.fillRect(obs.x - obs.size * 0.15, obs.y - obs.size * 0.8, obs.size * 0.3, obs.size * 1.6);
-            } else if (obs.type === 'ruins') {
-                g.fillStyle(0x667788, 0.6);
-                g.fillRect(obs.x - obs.size * 0.5, obs.y - obs.size * 0.3, obs.size, obs.size * 0.6);
-                g.fillStyle(0x556677, 0.4);
-                g.fillRect(obs.x - obs.size * 0.3, obs.y - obs.size * 0.6, obs.size * 0.6, obs.size * 0.3);
-                g.fillStyle(0x000000, 0.1);
-                g.fillCircle(obs.x + obs.size * 0.1, obs.y, obs.size * 0.15);
-            } else if (obs.type === 'plant') {
-                g.fillStyle(0x228833, 0.6);
-                g.fillCircle(obs.x, obs.y, obs.size * 0.7);
-                g.fillStyle(0x33aa44, 0.4);
-                g.fillCircle(obs.x - obs.size * 0.2, obs.y - obs.size * 0.3, obs.size * 0.4);
-                g.fillCircle(obs.x + obs.size * 0.3, obs.y - obs.size * 0.1, obs.size * 0.35);
-            }
+            var obsBiome = this.getBiomeAtWorldPosition(obs.x, obs.y);
+            var obsKey = this.getObstacleTextureKey(obs, obsBiome);
+            if (!obsKey || !this.textures.exists(obsKey)) continue;
+            var obsStyle = this.getBiomeStyle(obsBiome);
+
+            var obsSprite = this.add.image(obs.x, obs.y, obsKey);
+            obsSprite.setDepth(3);
+            obsSprite.setTint(this.mixTint(obs.color || 0xffffff, obsStyle.tint));
+            obsSprite.setRotation(obs.rotation || 0);
+            obsSprite.setScale(Helpers.clamp(((obs.size || 20) / 24) * obsStyle.obstacleScale, 0.4, 2.4));
+            obsSprite.setAlpha(obs.type === 'crystal' ? (0.75 + obsStyle.crystalAlphaBoost) : (0.82 + obsStyle.obstacleAlphaBoost));
+            this.terrainSpriteLayer.add(obsSprite);
         }
+    }
+
+    getObstacleTextureKey(obstacle, biomeName) {
+        if (!obstacle) return null;
+        // Biome-biased overrides first
+        if ((biomeName === 'lava' || biomeName === 'volcanic' || biomeName === 'sulfur_plains') && obstacle.type !== 'crystal') {
+            return this.textures.exists('terrain_ruins') ? 'terrain_ruins' : (this.textures.exists('terrain_rock') ? 'terrain_rock' : null);
+        }
+        if (biomeName === 'acid_lakes' && obstacle.type !== 'pillar') {
+            return this.textures.exists('terrain_crystal') ? 'terrain_crystal' : (this.textures.exists('terrain_rock') ? 'terrain_rock' : null);
+        }
+        if ((biomeName === 'ice_caps' || biomeName === 'ice_plains' || biomeName === 'deep_ice' || biomeName === 'frozen_waste' || biomeName === 'nitrogen_ice') && obstacle.type !== 'plant') {
+            return this.textures.exists('terrain_crystal') ? 'terrain_crystal' : (this.textures.exists('terrain_pillar') ? 'terrain_pillar' : null);
+        }
+        if ((biomeName === 'forest' || biomeName === 'moss') && obstacle.type !== 'ruins') {
+            return this.textures.exists('terrain_plant') ? 'terrain_plant' : (this.textures.exists('terrain_rock') ? 'terrain_rock' : null);
+        }
+
+        if (obstacle.type === 'rock' && this.textures.exists('terrain_rock')) return 'terrain_rock';
+        if (obstacle.type === 'crystal' && this.textures.exists('terrain_crystal')) return 'terrain_crystal';
+        if (obstacle.type === 'pillar' && this.textures.exists('terrain_pillar')) return 'terrain_pillar';
+        if (obstacle.type === 'ruins' && this.textures.exists('terrain_ruins')) return 'terrain_ruins';
+        if (obstacle.type === 'plant' && this.textures.exists('terrain_plant')) return 'terrain_plant';
+        return this.textures.exists('object_sprite') ? 'object_sprite' : null;
+    }
+
+    getDecoTextureKey(deco, biomeName) {
+        if (!deco) return null;
+        if (biomeName === 'lava' || biomeName === 'volcanic' || biomeName === 'sulfur_plains') {
+            return this.textures.exists('terrain_crystal') ? 'terrain_crystal' : (this.textures.exists('terrain_deco') ? 'terrain_deco' : null);
+        }
+        if (biomeName === 'acid_lakes') {
+            return this.textures.exists('terrain_plant') ? 'terrain_plant' : (this.textures.exists('terrain_deco') ? 'terrain_deco' : null);
+        }
+        if (biomeName === 'forest' || biomeName === 'moss') {
+            return this.textures.exists('terrain_plant') ? 'terrain_plant' : (this.textures.exists('terrain_deco') ? 'terrain_deco' : null);
+        }
+        if (biomeName === 'ice_caps' || biomeName === 'ice_plains' || biomeName === 'deep_ice' || biomeName === 'frozen_waste' || biomeName === 'nitrogen_ice') {
+            return this.textures.exists('terrain_crystal') ? 'terrain_crystal' : (this.textures.exists('terrain_deco') ? 'terrain_deco' : null);
+        }
+        if (deco.type === 'grass' || deco.type === 'moss' || deco.type === 'spore' || deco.type === 'plant') {
+            return this.textures.exists('terrain_plant') ? 'terrain_plant' : null;
+        }
+        if (deco.type === 'pebble' || deco.type === 'crack' || deco.type === 'vent') {
+            return this.textures.exists('terrain_deco') ? 'terrain_deco' : null;
+        }
+        return this.textures.exists('terrain_deco') ? 'terrain_deco' : null;
+    }
+
+    getBiomeAtWorldPosition(x, y) {
+        if (!this.tiles || this.tiles.length === 0) return null;
+        var tileSize = 60;
+        var col = Helpers.clamp(Math.floor(x / tileSize), 0, this.tiles[0].length - 1);
+        var row = Helpers.clamp(Math.floor(y / tileSize), 0, this.tiles.length - 1);
+        var tile = this.tiles[row] && this.tiles[row][col];
+        return tile ? tile.biome : null;
+    }
+
+    getBiomeStyle(biomeName) {
+        var styles = {
+            lava: { tint: 0xff7a2a, obstacleScale: 1.05, obstacleAlphaBoost: 0.05, crystalAlphaBoost: 0.08, decoScale: 0.9, decoAlphaBoost: 0.1 },
+            volcanic: { tint: 0xcc7744, obstacleScale: 1.08, obstacleAlphaBoost: 0.05, crystalAlphaBoost: 0.06, decoScale: 0.95, decoAlphaBoost: 0.08 },
+            sulfur_plains: { tint: 0xbba233, obstacleScale: 1.02, obstacleAlphaBoost: 0.04, crystalAlphaBoost: 0.05, decoScale: 0.9, decoAlphaBoost: 0.09 },
+            acid_lakes: { tint: 0x99cc55, obstacleScale: 0.95, obstacleAlphaBoost: 0.02, crystalAlphaBoost: 0.08, decoScale: 1.05, decoAlphaBoost: 0.12 },
+            forest: { tint: 0x66bb66, obstacleScale: 1.0, obstacleAlphaBoost: 0.03, crystalAlphaBoost: 0.02, decoScale: 1.1, decoAlphaBoost: 0.1 },
+            ice_caps: { tint: 0xbfe7ff, obstacleScale: 1.06, obstacleAlphaBoost: 0.02, crystalAlphaBoost: 0.12, decoScale: 0.95, decoAlphaBoost: 0.08 },
+            ice_plains: { tint: 0xcdeeff, obstacleScale: 1.06, obstacleAlphaBoost: 0.02, crystalAlphaBoost: 0.12, decoScale: 0.95, decoAlphaBoost: 0.08 },
+            deep_ice: { tint: 0x99d6ff, obstacleScale: 1.08, obstacleAlphaBoost: 0.03, crystalAlphaBoost: 0.12, decoScale: 0.9, decoAlphaBoost: 0.08 },
+            frozen_waste: { tint: 0xb8d8ee, obstacleScale: 1.04, obstacleAlphaBoost: 0.02, crystalAlphaBoost: 0.1, decoScale: 0.9, decoAlphaBoost: 0.07 },
+            nitrogen_ice: { tint: 0xc8e6ff, obstacleScale: 1.04, obstacleAlphaBoost: 0.02, crystalAlphaBoost: 0.1, decoScale: 0.9, decoAlphaBoost: 0.07 }
+        };
+        return styles[biomeName] || { tint: 0xffffff, obstacleScale: 1, obstacleAlphaBoost: 0, crystalAlphaBoost: 0, decoScale: 1, decoAlphaBoost: 0.05 };
+    }
+
+    mixTint(baseColor, overlayColor) {
+        var br = (baseColor >> 16) & 0xff;
+        var bg = (baseColor >> 8) & 0xff;
+        var bb = baseColor & 0xff;
+        var or = (overlayColor >> 16) & 0xff;
+        var og = (overlayColor >> 8) & 0xff;
+        var ob = overlayColor & 0xff;
+        var r = Math.floor(br * 0.55 + or * 0.45);
+        var g = Math.floor(bg * 0.55 + og * 0.45);
+        var b = Math.floor(bb * 0.55 + ob * 0.45);
+        return (Helpers.clamp(r, 0, 255) << 16) | (Helpers.clamp(g, 0, 255) << 8) | Helpers.clamp(b, 0, 255);
     }
 
     getBiomeTileColor(biomeName, baseColor, height) {
@@ -449,6 +587,7 @@ class PlanetScene extends Phaser.Scene {
         this.minimapG.clear();
 
         this.terrainGraphics.setPosition(-this.camX, -this.camY);
+        if (this.terrainSpriteLayer) this.terrainSpriteLayer.setPosition(-this.camX, -this.camY);
 
         this.drawBackground();
         this.drawEntities();
@@ -460,6 +599,7 @@ class PlanetScene extends Phaser.Scene {
         this.drawMinimap();
         this.updateHUDText();
         this.updateNotificationDisplay(dt);
+        this.cleanupPlanetSceneSprites();
 
         if (Phaser.Input.Keyboard.JustDown(this.keys.ESC)) this.leavePlanet();
     }
@@ -1119,7 +1259,11 @@ class PlanetScene extends Phaser.Scene {
             var item = this.collectibles[ci];
             if (!item.alive) continue;
             var sx = item.x - cx, sy = item.y - cy + Math.sin(item.bobPhase) * 3;
-            if (sx < -20 || sx > GAME_WIDTH + 20 || sy < -20 || sy > GAME_HEIGHT + 20) continue;
+            if (sx < -20 || sx > GAME_WIDTH + 20 || sy < -20 || sy > GAME_HEIGHT + 20) {
+                this.tryRenderPlanetCollectibleSprite(item, sx, sy, true);
+                continue;
+            }
+            if (this.tryRenderPlanetCollectibleSprite(item, sx, sy, false)) continue;
             g.fillStyle(item.color, 0.9);
             g.fillCircle(sx, sy, item.size);
             g.fillStyle(0xffffff, 0.3 + Math.sin(t / 200) * 0.2);
@@ -1130,7 +1274,23 @@ class PlanetScene extends Phaser.Scene {
         for (var ii = 0; ii < this.interactables.length; ii++) {
             var obj = this.interactables[ii];
             var ix = obj.x - cx, iy = obj.y - cy;
-            if (ix < -40 || ix > GAME_WIDTH + 40 || iy < -40 || iy > GAME_HEIGHT + 40) continue;
+            if (ix < -40 || ix > GAME_WIDTH + 40 || iy < -40 || iy > GAME_HEIGHT + 40) {
+                this.tryRenderPlanetInteractableSprite(obj, ix, iy, true);
+                continue;
+            }
+            if (this.tryRenderPlanetInteractableSprite(obj, ix, iy, false)) {
+                var distToObjSprite = Helpers.distance(this.player.x, this.player.y, obj.x, obj.y);
+                if (distToObjSprite < 100) {
+                    if (!obj._label) {
+                        obj._label = this.add.text(0, 0, obj.label, { fontFamily: 'monospace', fontSize: '9px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 }).setOrigin(0.5).setDepth(200);
+                    }
+                    obj._label.setPosition(ix, iy - obj.size - 14);
+                    obj._label.setVisible(true);
+                } else if (obj._label) {
+                    obj._label.setVisible(false);
+                }
+                continue;
+            }
 
             g.fillStyle(obj.color, 0.15);
             g.fillCircle(ix, iy, obj.size + 8 + Math.sin(t / 300) * 3);
@@ -1177,7 +1337,11 @@ class PlanetScene extends Phaser.Scene {
             var enemy = this.surfaceEnemies[ei];
             if (!enemy.alive) continue;
             var ex = enemy.x - cx, ey = enemy.y - cy;
-            if (ex < -40 || ex > GAME_WIDTH + 40 || ey < -40 || ey > GAME_HEIGHT + 40) continue;
+            if (ex < -40 || ex > GAME_WIDTH + 40 || ey < -40 || ey > GAME_HEIGHT + 40) {
+                this.tryRenderPlanetEnemySprite(enemy, ex, ey, true);
+                continue;
+            }
+            if (this.tryRenderPlanetEnemySprite(enemy, ex, ey, false)) continue;
 
             if (enemy.hitFlash > 0) {
                 g.fillStyle(0xffffff, 0.8);
@@ -1241,7 +1405,11 @@ class PlanetScene extends Phaser.Scene {
         for (var pi = 0; pi < this.projectiles.length; pi++) {
             var proj = this.projectiles[pi];
             var px = proj.x - cx, py = proj.y - cy;
-            if (px < -10 || px > GAME_WIDTH + 10 || py < -10 || py > GAME_HEIGHT + 10) continue;
+            if (px < -10 || px > GAME_WIDTH + 10 || py < -10 || py > GAME_HEIGHT + 10) {
+                this.tryRenderPlanetProjectileSprite(proj, px, py, true);
+                continue;
+            }
+            if (this.tryRenderPlanetProjectileSprite(proj, px, py, false)) continue;
             g.fillStyle(proj.color, 0.9);
             g.fillCircle(px, py, proj.size);
             g.fillStyle(0xffffff, 0.4);
@@ -1260,6 +1428,16 @@ class PlanetScene extends Phaser.Scene {
 
         // Invincibility flash
         if (p.invincible > 0 && Math.floor(t / 80) % 2 === 0) return;
+
+        if (this.tryRenderPlanetPlayerSprite(sx, sy)) {
+            if (p.shieldActive) {
+                g.lineStyle(2, COLORS.SHIELD, 0.3 + Math.sin(t / 200) * 0.15);
+                g.strokeCircle(sx, sy, p.size + 8);
+                g.fillStyle(COLORS.SHIELD, 0.08);
+                g.fillCircle(sx, sy, p.size + 8);
+            }
+            return;
+        }
 
         // Shield visual
         if (p.shieldActive) {
@@ -1493,5 +1671,130 @@ class PlanetScene extends Phaser.Scene {
 
     showQuestComplete(quest) {
         this.addNotification('★ Quest Complete: ' + (quest.title || quest.name || 'Unknown') + '!', COLORS.WARNING);
+    }
+    ensurePlanetEntityId(entity, prefix) {
+        if (!entity.__spriteId) {
+            this.spriteIdCounter += 1;
+            entity.__spriteId = prefix + '_' + this.spriteIdCounter;
+        }
+        return entity.__spriteId;
+    }
+
+    getPlanetEnemyTextureKey(enemy) {
+        if (!enemy) return null;
+        if (enemy.isPlanetBoss) return this.textures.exists('enemy_boss') ? 'enemy_boss' : null;
+        if (enemy.type === 'alien' && this.textures.exists('enemy_alien')) return 'enemy_alien';
+        if (enemy.type === 'drone' && this.textures.exists('enemy_drone')) return 'enemy_drone';
+        if (enemy.type === 'pirate' && this.textures.exists('enemy_pirate')) return 'enemy_pirate';
+        return this.textures.exists('enemy_pirate') ? 'enemy_pirate' : null;
+    }
+
+    tryRenderPlanetEnemySprite(enemy, sx, sy, forceHide) {
+        var key = this.getPlanetEnemyTextureKey(enemy);
+        if (!key) return false;
+        var id = this.ensurePlanetEntityId(enemy, 'pl_enemy');
+        var sprite = this.surfaceEnemySprites[id];
+        if (!sprite) {
+            sprite = this.add.image(sx, sy, key).setDepth(38);
+            this.surfaceEnemySprites[id] = sprite;
+        }
+        if (forceHide) { sprite.setVisible(false); return true; }
+        if (sprite.texture.key !== key) sprite.setTexture(key);
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setRotation(enemy.rotation + Math.PI / 2);
+        sprite.setScale(Helpers.clamp(enemy.size / 20, 0.45, 2.3));
+        sprite.setTint(enemy.hitFlash > 0 ? 0xffffff : enemy.color);
+        sprite.setAlpha(enemy.isPlanetBoss ? 0.95 : 0.9);
+        return true;
+    }
+
+    tryRenderPlanetCollectibleSprite(item, sx, sy, forceHide) {
+        if (!this.textures.exists('loot_sprite') && !this.textures.exists('object_sprite')) return false;
+        var key = item.data && (item.data.rarity === 'common' || item.data.rarity === 'uncommon') && this.textures.exists('object_sprite') ? 'object_sprite' : 'loot_sprite';
+        var id = this.ensurePlanetEntityId(item, 'pl_loot');
+        var sprite = this.collectibleSprites[id];
+        if (!sprite) {
+            sprite = this.add.image(sx, sy, key).setDepth(30);
+            this.collectibleSprites[id] = sprite;
+        }
+        if (forceHide) { sprite.setVisible(false); return true; }
+        if (sprite.texture.key !== key) sprite.setTexture(key);
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setScale(0.2 + Math.sin(item.bobPhase || 0) * 0.02);
+        sprite.setTint(item.color || 0xffffff);
+        return true;
+    }
+
+    tryRenderPlanetInteractableSprite(obj, sx, sy, forceHide) {
+        if (!this.textures.exists('shop_sprite') && !this.textures.exists('object_sprite') && !this.textures.exists('ship_player_alt')) return false;
+        var key = 'object_sprite';
+        if (obj.type === 'planet_shop' || obj.type === 'station') key = this.textures.exists('shop_sprite') ? 'shop_sprite' : 'object_sprite';
+        if (obj.type === 'ship') key = this.textures.exists('ship_player_alt') ? 'ship_player_alt' : 'object_sprite';
+        if (obj.type === 'quest_npc') key = this.textures.exists('character_player') ? 'character_player' : 'object_sprite';
+        var id = this.ensurePlanetEntityId(obj, 'pl_obj');
+        var sprite = this.interactableSprites[id];
+        if (!sprite) {
+            sprite = this.add.image(sx, sy, key).setDepth(32);
+            this.interactableSprites[id] = sprite;
+        }
+        if (forceHide) { sprite.setVisible(false); return true; }
+        if (sprite.texture.key !== key) sprite.setTexture(key);
+        sprite.setVisible(true);
+        sprite.setPosition(sx, sy);
+        sprite.setScale(Helpers.clamp(obj.size / 32, 0.35, 1.5));
+        sprite.setTint(obj.color || 0xffffff);
+        sprite.setAlpha(0.9);
+        return true;
+    }
+
+    tryRenderPlanetProjectileSprite(proj, px, py, forceHide) {
+        if (!this.textures.exists('laser_blue')) return false;
+        var id = this.ensurePlanetEntityId(proj, 'pl_proj');
+        var sprite = this.projectileSprites[id];
+        if (!sprite) {
+            sprite = this.add.image(px, py, 'laser_blue').setDepth(42);
+            this.projectileSprites[id] = sprite;
+        }
+        if (forceHide) { sprite.setVisible(false); return true; }
+        sprite.setVisible(true);
+        sprite.setPosition(px, py);
+        sprite.setScale(Helpers.clamp((proj.size || 3) / 6, 0.25, 1.2));
+        sprite.setTint(proj.color || 0xffffff);
+        sprite.setAlpha(0.9);
+        return true;
+    }
+
+    tryRenderPlanetPlayerSprite(sx, sy) {
+        if (!this.playerSprite) return false;
+        this.playerSprite.setVisible(true);
+        this.playerSprite.setPosition(sx, sy);
+        this.playerSprite.setRotation(this.player.rotation + Math.PI / 2);
+        this.playerSprite.setScale(Helpers.clamp(this.player.size / 14, 0.6, 1.3));
+        this.playerSprite.setTint(COLORS.PRIMARY);
+        return true;
+    }
+
+    cleanupPlanetSceneSprites() {
+        this.cleanupPlanetSpriteMap(this.collectibleSprites, this.collectibles);
+        this.cleanupPlanetSpriteMap(this.interactableSprites, this.interactables, true);
+        this.cleanupPlanetSpriteMap(this.surfaceEnemySprites, this.surfaceEnemies);
+        this.cleanupPlanetSpriteMap(this.projectileSprites, this.projectiles, false, 'life');
+    }
+
+    cleanupPlanetSpriteMap(map, entities, noAliveFlag, lifeKey) {
+        var aliveIds = {};
+        for (var i = 0; i < entities.length; i++) {
+            var e = entities[i];
+            if (!e || !e.__spriteId) continue;
+            if (noAliveFlag || e.alive || (lifeKey && e[lifeKey] > 0)) aliveIds[e.__spriteId] = true;
+        }
+        for (var k in map) {
+            if (!aliveIds[k]) {
+                if (map[k] && map[k].destroy) map[k].destroy();
+                delete map[k];
+            }
+        }
     }
 }

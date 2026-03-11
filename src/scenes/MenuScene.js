@@ -39,6 +39,11 @@ class MenuScene extends Phaser.Scene {
         // Animated ship
         this.shipX = -50;
         this.shipY = 330;
+        this.onlineAssetsReady = this.registry.get('onlineAssetsReady') === true;
+        this.menuShipSprite = null;
+        if (this.onlineAssetsReady && this.textures.exists('ship_player')) {
+            this.menuShipSprite = this.add.image(this.shipX, this.shipY, 'ship_player').setScale(0.4);
+        }
 
         // Buttons
         const saveSystem = new SaveSystem();
@@ -95,6 +100,12 @@ class MenuScene extends Phaser.Scene {
     animateShip() {
         this.shipX += 1.5;
         if (this.shipX > GAME_WIDTH + 50) this.shipX = -50;
+
+        if (this.menuShipSprite) {
+            this.menuShipSprite.setPosition(this.shipX, this.shipY);
+            this.menuShipSprite.setRotation(Math.sin(Date.now() / 500) * 0.08 + Math.PI / 2);
+            return;
+        }
 
         const g = this.shipGraphics;
         g.clear();

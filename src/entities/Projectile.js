@@ -26,10 +26,8 @@ class Projectile {
             this.alive = false;
         }
 
-        // Off screen
-        if (this.x < -20 || this.x > GAME_WIDTH + 20 || this.y < -20 || this.y > GAME_HEIGHT + 20) {
-            this.alive = false;
-        }
+        // Do not cull by screen bounds here.
+        // SpaceScene uses world-space coordinates that can be far outside the viewport.
 
         // Trail
         this.trailTimer -= dt;

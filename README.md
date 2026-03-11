@@ -14,6 +14,7 @@ A 2D space adventure game built with Phaser.js where you explore the Solar Syste
 - **Boss Battles** - Face the Pirate Commander, Alien Warship, and the Void Titan
 - **Save System** - Auto-save with manual save support via localStorage
 - **Procedural Audio** - Generated sound effects for lasers, explosions, and more
+- **Online Asset Pipeline** - CDN-loaded images/audio with automatic procedural fallback if unavailable
 
 ## Controls
 
