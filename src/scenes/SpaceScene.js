@@ -48,7 +48,11 @@ class SpaceScene extends Phaser.Scene {
 
         // Background layers
         this.add.graphics().fillStyle(COLORS.BG_DARK, 1).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        if (this.onlineAssetsReady && this.textures.exists('bg_space')) {
+        if (this.onlineAssetsReady && this.textures.exists('oga_space_bg')) {
+            this.spaceBgImage = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'oga_space_bg')
+                .setOrigin(0)
+                .setAlpha(0.32);
+        } else if (this.onlineAssetsReady && this.textures.exists('bg_space')) {
             this.spaceBgImage = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg_space')
                 .setOrigin(0)
                 .setAlpha(0.25);
@@ -109,7 +113,11 @@ class SpaceScene extends Phaser.Scene {
         this.shopSprites = {};
         this.planetSprites = {};
         this.spriteIdCounter = 0;
-        if (this.onlineAssetsReady && (this.textures.exists('ship_player') || this.textures.exists('ship_player_alt'))) {
+        if (this.onlineAssetsReady && this.textures.exists('kenney_ship')) {
+            this.shipSprite = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'kenney_ship')
+                .setDepth(50)
+                .setScale(0.55);
+        } else if (this.onlineAssetsReady && (this.textures.exists('ship_player') || this.textures.exists('ship_player_alt'))) {
             this.shipSprite = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, this.getPlayerShipTextureKey())
                 .setDepth(50)
                 .setScale(0.45);
@@ -118,6 +126,38 @@ class SpaceScene extends Phaser.Scene {
         // Planets in world space
         this.planets = GameData.planets[this.currentStage].map(function(p) { return new Planet(p); });
         this.placePlanetsInWorld();
+
+        // Add more detail: planet sprites in space
+        if (this.onlineAssetsReady && this.textures.exists('kenney_planet')) {
+            for (let i = 0; i < 3; i++) {
+                this.add.image(
+                    Helpers.randomFloat(200, GAME_WIDTH - 200),
+                    Helpers.randomFloat(200, GAME_HEIGHT - 200),
+                    'kenney_planet'
+                ).setDepth(8).setScale(Helpers.randomFloat(0.7, 1.3)).setAlpha(0.13);
+            }
+        }
+
+        // Add more detail: asteroids in space
+        if (this.onlineAssetsReady && this.textures.exists('kenney_asteroid')) {
+            for (let i = 0; i < 7; i++) {
+                this.add.image(
+                    Helpers.randomFloat(100, GAME_WIDTH - 100),
+                    Helpers.randomFloat(100, GAME_HEIGHT - 100),
+                    'kenney_asteroid'
+                ).setDepth(9).setScale(Helpers.randomFloat(0.5, 1.1)).setAlpha(0.18);
+            }
+        }
+
+        // Add more detail: shop as a real space building
+        let shopKey = this.textures.exists('kenney_shop') ? 'kenney_shop' : (this.textures.exists('shop_sprite') ? 'shop_sprite' : null);
+        if (shopKey) {
+            this.add.image(
+                GAME_WIDTH / 2 + 180,
+                GAME_HEIGHT / 2 - 120,
+                shopKey
+            ).setDepth(30).setScale(1.2).setAlpha(0.98);
+        }
 
         // Spawn timers
         this.spawnTimer = 0;
