@@ -76,8 +76,35 @@ class PlanetScene extends Phaser.Scene {
         this.surfaceEnemySprites = {};
         this.projectileSprites = {};
         this.playerSprite = null;
-        if (this.textures.exists('character_player')) {
-            this.playerSprite = this.add.image(0, 0, 'character_player').setDepth(60).setScale(0.85);
+        // Prefer new Kenney asset if available
+        if (this.onlineAssetsReady && this.textures.exists('kenney_ship')) {
+            this.playerSprite = this.add.image(0, 0, 'kenney_ship').setDepth(60).setScale(1.2);
+        } else if (this.textures.exists('character_player')) {
+            this.playerSprite = this.add.image(0, 0, 'character_player').setDepth(60).setScale(1.2);
+        }
+
+        // Add more detail: planet sprite overlay
+        if (this.onlineAssetsReady && this.textures.exists('kenney_planet')) {
+            this.planetSprite = this.add.image(this.worldWidth / 2, this.worldHeight / 2, 'kenney_planet')
+                .setDepth(10)
+                .setScale(2.5)
+                .setAlpha(0.18);
+        } else if (this.textures.exists('oga_planet')) {
+            this.planetSprite = this.add.image(this.worldWidth / 2, this.worldHeight / 2, 'oga_planet')
+                .setDepth(10)
+                .setScale(2.5)
+                .setAlpha(0.18);
+        }
+
+        // Add more detail: surface asteroids
+        if (this.onlineAssetsReady && this.textures.exists('kenney_asteroid')) {
+            for (let i = 0; i < 8; i++) {
+                this.add.image(
+                    Helpers.randomFloat(200, this.worldWidth - 200),
+                    Helpers.randomFloat(200, this.worldHeight - 200),
+                    'kenney_asteroid'
+                ).setDepth(12).setScale(Helpers.randomFloat(0.7, 1.2)).setAlpha(0.7);
+            }
         }
 
         this.camX = 0;
@@ -116,6 +143,54 @@ class PlanetScene extends Phaser.Scene {
         this.addNotification('Landed on ' + p.name + '! Explore the surface.', COLORS.PRIMARY);
         if (this.planetQuest) {
             this.addNotification('QUEST: ' + this.planetQuest.title, COLORS.WARNING);
+        }
+
+        // Add more detail: surface enemy sprites (aliens)
+        let alienKey = null;
+        if (this.onlineAssetsReady && this.textures.exists('enemy_alien')) {
+            alienKey = 'enemy_alien';
+        } else if (this.onlineAssetsReady && this.textures.exists('kenney_alien')) {
+            alienKey = 'kenney_alien';
+        }
+        if (alienKey) {
+            for (let i = 0; i < 4; i++) {
+                this.add.image(
+                    Helpers.randomFloat(300, this.worldWidth - 300),
+                    Helpers.randomFloat(300, this.worldHeight - 300),
+                    alienKey
+                ).setDepth(15).setScale(Helpers.randomFloat(1.5, 2.1)).setAlpha(0.9);
+            }
+        }
+
+        // Add more detail: crates using Kenney or OGA crate sprite
+        let crateKey = this.textures.exists('kenney_crate') ? 'kenney_crate' : (this.textures.exists('object_sprite') ? 'object_sprite' : null);
+        if (crateKey) {
+            let minDist = 200;
+            for (let i = 0; i < 6; i++) {
+                let tries = 0, x, y;
+                do {
+                    x = Helpers.randomFloat(250, this.worldWidth - 250);
+                    y = Helpers.randomFloat(250, this.worldHeight - 250);
+                    tries++;
+                } while (Helpers.distance(x, y, this.worldWidth / 2, this.worldHeight / 2) < minDist && tries < 10);
+                this.add.image(x, y, crateKey).setDepth(13).setScale(Helpers.randomFloat(1.3, 1.7)).setAlpha(0.85);
+            }
+        }
+
+        // Add more detail: shop as a real space building
+        let shopKey = this.textures.exists('kenney_shop') ? 'kenney_shop' : (this.textures.exists('shop_sprite') ? 'shop_sprite' : null);
+        if (shopKey) {
+            this.add.image(
+                this.worldWidth / 2 + 300,
+                this.worldHeight / 2 - 200,
+                shopKey
+            ).setDepth(20).setScale(2.2).setAlpha(0.95);
+        }
+        // Add gun asset to player (visual only, for demonstration)
+        if (this.onlineAssetsReady && this.textures.exists('kenney_gun') && this.playerSprite) {
+            this.gunSprite = this.add.image(0, 0, 'kenney_gun').setDepth(61).setScale(1.2);
+            this.gunSprite.x = this.playerSprite.x + 18;
+            this.gunSprite.y = this.playerSprite.y;
         }
 
         this.hazardTimer = 0;
@@ -533,6 +608,10 @@ class PlanetScene extends Phaser.Scene {
 
     // ============ HUD ============
     createHUD(p) {
+        // Use Kenney UI panel for HUD background if available
+        if (this.onlineAssetsReady && this.textures.exists('kenney_ui_panel')) {
+            this.add.image(180, 60, 'kenney_ui_panel').setDepth(100).setScale(1.2).setAlpha(0.92);
+        }
         this.add.text(GAME_WIDTH / 2, 12, p.name.toUpperCase(), {
             fontFamily: 'monospace', fontSize: '16px', color: '#' + p.color.toString(16).padStart(6, '0'),
             fontStyle: 'bold', stroke: '#000000', strokeThickness: 3
