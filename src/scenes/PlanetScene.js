@@ -54,7 +54,7 @@ class PlanetScene extends Phaser.Scene {
 
         this.player = {
             x: this.worldWidth / 2, y: this.worldHeight / 2,
-            vx: 0, vy: 0, speed: 160, size: 12, rotation: 0,
+            vx: 0, vy: 0, speed: 160, size: 22, rotation: 0, // Increased player size
             health: this.ship.health, maxHealth: this.ship.maxHealth,
             invincible: 0, currentWeapon: WEAPON_TYPES.PISTOL,
             weapons: {
@@ -78,9 +78,9 @@ class PlanetScene extends Phaser.Scene {
         this.playerSprite = null;
         // Prefer new Kenney asset if available
         if (this.onlineAssetsReady && this.textures.exists('kenney_ship')) {
-            this.playerSprite = this.add.image(0, 0, 'kenney_ship').setDepth(60).setScale(1.2);
+            this.playerSprite = this.add.image(0, 0, 'kenney_ship').setDepth(60).setScale(2.0); // Increased player sprite scale
         } else if (this.textures.exists('character_player')) {
-            this.playerSprite = this.add.image(0, 0, 'character_player').setDepth(60).setScale(1.2);
+            this.playerSprite = this.add.image(0, 0, 'character_player').setDepth(60).setScale(2.0); // Increased player sprite scale
         }
 
         // Add more detail: planet sprite overlay
@@ -331,7 +331,7 @@ class PlanetScene extends Phaser.Scene {
     createPlanetBoss(x, y, planetId, bossData) {
         return {
             x: x, y: y, vx: 0, vy: 0,
-            size: bossData.size, health: bossData.health, maxHealth: bossData.health,
+            size: bossData.size * 1.4, health: bossData.health, maxHealth: bossData.health, // Increased boss size
             damage: bossData.damage, speed: bossData.speed, alive: true,
             rotation: Helpers.randomFloat(0, Math.PI * 2),
             isBoss: true, isPlanetBoss: true, planetId: planetId,
@@ -348,7 +348,7 @@ class PlanetScene extends Phaser.Scene {
     createSurfaceEnemy(x, y, level, isBoss) {
         return {
             x: x, y: y, vx: 0, vy: 0,
-            size: isBoss ? 22 : 12,
+            size: isBoss ? 32 : 20, // Increased enemy sizes
             health: isBoss ? 200 + level * 30 : 20 + level * 8,
             maxHealth: isBoss ? 200 + level * 30 : 20 + level * 8,
             damage: isBoss ? 15 + level * 3 : 5 + level,
